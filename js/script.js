@@ -1,8 +1,8 @@
-// @ts-nocheck
-let mergedData = [];
+        // @ts-nocheck
+        let mergedData = [];
         let selectedFiles = [];
-        let allColumns = new Set(); // Pour garder toutes les colonnes uniques
-        let columnFilesMap = new Map(); // Pour savoir quelles colonnes sont dans quels fichiers
+        let allColumns = new Set();
+        let columnFilesMap = new Map();
 
         // Éléments DOM
         const uploadArea = document.getElementById('uploadArea');
@@ -29,6 +29,12 @@ let mergedData = [];
         const previewRows = document.getElementById('previewRows');
         const downloadSection = document.getElementById('downloadSection');
         const downloadBtn = document.getElementById('downloadBtn');
+        const exportOptions = document.getElementById('exportOptions');
+        const sizeWarning = document.getElementById('sizeWarning');
+        const warningText = document.getElementById('warningText');
+        const includeMetadata = document.getElementById('includeMetadata');
+        const formatXML = document.getElementById('formatXML');
+        const includeComments = document.getElementById('includeComments');
 
         // Écouteurs d'événements
         csvFilesInput.addEventListener('change', handleFileSelection);
@@ -96,6 +102,7 @@ let mergedData = [];
             if (selectedFiles.length === 0) {
                 fileList.classList.remove('visible');
                 dataPreview.classList.remove('visible');
+                exportOptions.style.display = 'none';
                 columnsSummary.style.display = 'none';
                 return;
             }
@@ -136,7 +143,6 @@ let mergedData = [];
         function removeFile(index) {
             selectedFiles.splice(index, 1);
             
-            // Mettre à jour l'input file
             const dataTransfer = new DataTransfer();
             selectedFiles.forEach(file => dataTransfer.items.add(file));
             csvFilesInput.files = dataTransfer.files;
@@ -161,6 +167,7 @@ let mergedData = [];
             mergeBtn.disabled = true;
             convertBtn.disabled = true;
             dataPreview.classList.remove('visible');
+            exportOptions.style.display = 'none';
             columnsSummary.style.display = 'none';
             recordCount.textContent = '0';
             uniqueColumns.textContent = '0';
@@ -176,19 +183,17 @@ let mergedData = [];
             return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
         }
 
-        // Parsing CSV amélioré
+        // Parsing CSV
         function parseCSV(text, filename) {
             const rows = text.split(/\r?\n/).filter(r => r.trim() !== '');
             if (rows.length === 0) return { headers: [], data: [] };
             
-            // Détection du séparateur
             let separator = ',';
             const firstLine = rows[0];
             if (firstLine.includes(';') && !firstLine.includes(',') || firstLine.split(';').length > firstLine.split(',').length) {
                 separator = ';';
             }
             
-            // Parseur CSV qui gère les guillemets
             const parseCSVLine = (line) => {
                 const result = [];
                 let current = '';
@@ -200,7 +205,7 @@ let mergedData = [];
                     
                     if (char === '"' && inQuotes && nextChar === '"') {
                         current += '"';
-                        i++; // Skip next quote
+                        i++;
                     } else if (char === '"') {
                         inQuotes = !inQuotes;
                     } else if (char === separator && !inQuotes) {
@@ -228,7 +233,7 @@ let mergedData = [];
             return { headers, data };
         }
 
-        // Fusion des CSV en gardant TOUTES les colonnes
+        // Fusion des CSV
         async function mergeCSV() {
             if (selectedFiles.length === 0) {
                 showStatus('Veuillez sélectionner au moins un fichier CSV', 'error');
@@ -245,10 +250,9 @@ let mergedData = [];
             allColumns.clear();
             columnFilesMap.clear();
             let processedFiles = 0;
-            let totalRecords = 0;
 
             try {
-                // Première passe : collecter toutes les colonnes uniques
+                // Première passe : collecter toutes les colonnes
                 showStatus('Analyse des colonnes...', 'info');
                 
                 for (let file of selectedFiles) {
@@ -264,11 +268,10 @@ let mergedData = [];
                     });
                     
                     processedFiles++;
-                    const progress = (processedFiles / selectedFiles.length) * 50;
-                    progressFill.style.width = `${progress}%`;
+                    progressFill.style.width = `${(processedFiles / selectedFiles.length) * 50}%`;
                 }
                 
-                showStatus(`Toutes les colonnes collectées (${allColumns.size} uniques)`, 'success');
+                showStatus(`Colonnes collectées (${allColumns.size} uniques)`, 'success');
                 
                 // Deuxième passe : fusionner les données
                 showStatus('Fusion des données...', 'info');
@@ -280,39 +283,29 @@ let mergedData = [];
                     const text = await readFileAsText(file);
                     const { headers, data } = parseCSV(text, file.name);
                     
-                    // Créer un mapping des index des colonnes
                     const headerIndexMap = {};
                     headers.forEach((header, index) => {
                         headerIndexMap[header] = index;
                     });
                     
-                    // Pour chaque ligne du fichier actuel
                     data.forEach(row => {
                         const mergedRow = {};
                         
-                        // Pour chaque colonne globale
                         allColumnsArray.forEach(col => {
                             if (headerIndexMap[col] !== undefined) {
-                                // Si la colonne existe dans ce fichier, prendre la valeur
                                 mergedRow[col] = row[headers[headerIndexMap[col]]];
                             } else {
-                                // Sinon, laisser vide
                                 mergedRow[col] = '';
                             }
                         });
                         
                         mergedData.push(mergedRow);
-                        totalRecords++;
                     });
                     
                     processedFiles++;
-                    const progress = 50 + (processedFiles / selectedFiles.length) * 50;
-                    progressFill.style.width = `${progress}%`;
+                    progressFill.style.width = `${50 + (processedFiles / selectedFiles.length) * 50}%`;
                     
-                    showStatus(`Traitement de ${file.name}... (${processedFiles}/${selectedFiles.length})`, 'info');
-                    
-                    // Petite pause pour l'animation
-                    await new Promise(resolve => setTimeout(resolve, 300));
+                    await new Promise(resolve => setTimeout(resolve, 100));
                 }
 
                 mergeBtn.disabled = false;
@@ -327,19 +320,34 @@ let mergedData = [];
                 recordCount.textContent = mergedData.length.toLocaleString();
                 uniqueColumns.textContent = allColumns.size;
                 
-                // Afficher le résumé des colonnes
+                // Afficher le résumé et les options
                 updateColumnsSummary();
-                
-                // Afficher l'aperçu des données
                 showDataPreview();
+                exportOptions.style.display = 'block';
+                checkFileSize();
                 
-                showStatus(`Fusion réussie ! ${mergedData.length} enregistrements fusionnés avec ${allColumns.size} colonnes uniques.`, 'success');
+                showStatus(`Fusion réussie ! ${mergedData.length} enregistrements avec ${allColumns.size} colonnes.`, 'success');
                 
             } catch (error) {
                 console.error('Erreur lors de la fusion:', error);
                 showStatus(`Erreur lors de la fusion: ${error.message}`, 'error');
                 mergeBtn.disabled = false;
                 progressBar.classList.remove('visible');
+            }
+        }
+
+        // Vérifier la taille du fichier
+        function checkFileSize() {
+            const estimatedSize = mergedData.length * allColumns.size * 100;
+            
+            if (estimatedSize > 50 * 1024 * 1024) { // > 50MB
+                sizeWarning.style.display = 'flex';
+                warningText.textContent = `Fichier estimé à ${formatFileSize(estimatedSize)}. La conversion peut prendre du temps.`;
+            } else if (estimatedSize > 10 * 1024 * 1024) { // > 10MB
+                sizeWarning.style.display = 'flex';
+                warningText.textContent = `Fichier estimé à ${formatFileSize(estimatedSize)}.`;
+            } else {
+                sizeWarning.style.display = 'none';
             }
         }
 
@@ -379,7 +387,6 @@ let mergedData = [];
             previewColumns.textContent = `${allColumns.size} colonnes`;
             previewRows.textContent = `${Math.min(mergedData.length, 10)} sur ${mergedData.length}`;
             
-            // Créer l'en-tête du tableau
             const allColumnsArray = Array.from(allColumns);
             previewTableHeader.innerHTML = '';
             const headerRow = document.createElement('tr');
@@ -388,7 +395,6 @@ let mergedData = [];
                 const th = document.createElement('th');
                 th.textContent = col;
                 
-                // Ajouter un indicateur si la colonne n'est pas dans tous les fichiers
                 const filesWithColumn = columnFilesMap.get(col)?.size || 0;
                 if (filesWithColumn < selectedFiles.length) {
                     th.title = `Présente dans ${filesWithColumn}/${selectedFiles.length} fichiers`;
@@ -399,7 +405,6 @@ let mergedData = [];
             });
             previewTableHeader.appendChild(headerRow);
             
-            // Créer le corps du tableau (10 premières lignes max)
             previewTableBody.innerHTML = '';
             const rowsToShow = Math.min(mergedData.length, 10);
             
@@ -408,8 +413,9 @@ let mergedData = [];
                 
                 allColumnsArray.forEach(col => {
                     const td = document.createElement('td');
-                    td.textContent = mergedData[i][col] || '';
-                    if (mergedData[i][col] === '') {
+                    const value = mergedData[i][col] || '';
+                    td.textContent = value;
+                    if (value === '') {
                         td.style.color = '#9ca3af';
                         td.style.fontStyle = 'italic';
                     }
@@ -419,7 +425,6 @@ let mergedData = [];
                 previewTableBody.appendChild(row);
             }
             
-            // Si plus de 10 lignes, ajouter une ligne d'information
             if (mergedData.length > 10) {
                 const infoRow = document.createElement('tr');
                 const infoCell = document.createElement('td');
@@ -443,7 +448,7 @@ let mergedData = [];
             });
         }
 
-        // Conversion en XML avec TOUTES les colonnes
+        // Conversion en XML optimisée
         async function convertToXML() {
             if (mergedData.length === 0) {
                 showStatus('Veuillez d\'abord fusionner les fichiers CSV', 'error');
@@ -452,37 +457,90 @@ let mergedData = [];
 
             convertBtn.disabled = true;
             showStatus('Conversion en XML...', 'info');
+            progressBar.classList.add('visible');
+            progressFill.style.width = '0%';
 
             try {
                 const allColumnsArray = Array.from(allColumns);
+                const shouldFormat = formatXML.checked;
+                const shouldIncludeComments = includeComments.checked;
+                const shouldIncludeMetadata = includeMetadata.checked;
                 
-                let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-                xml += '<!-- Généré par CSV to XML Converter -->\n';
-                xml += `<!-- Date: ${new Date().toLocaleString('fr-FR')} -->\n`;
-                xml += `<!-- Fichiers sources: ${selectedFiles.map(f => f.name).join(', ')} -->\n`;
-                xml += `<!-- Enregistrements: ${mergedData.length} | Colonnes: ${allColumns.size} -->\n`;
-                xml += '<dataset>\n';
+                // Calculer la taille des morceaux pour éviter l'erreur de mémoire
+                const chunkSize = Math.max(1000, Math.floor(mergedData.length / 10));
+                const chunks = [];
                 
-                mergedData.forEach((item, index) => {
-                    xml += `  <record id="${index + 1}">\n`;
+                for (let i = 0; i < mergedData.length; i += chunkSize) {
+                    chunks.push(mergedData.slice(i, i + chunkSize));
+                }
+                
+                let xmlParts = [];
+                
+                // En-tête XML
+                xmlParts.push('<?xml version="1.0" encoding="UTF-8"?>');
+                
+                if (shouldIncludeComments) {
+                    xmlParts.push('<!-- Généré par CSV to XML Converter -->');
+                    xmlParts.push(`<!-- Date: ${new Date().toLocaleString('fr-FR')} -->`);
+                    xmlParts.push(`<!-- Fichiers sources: ${selectedFiles.map(f => f.name).join(', ')} -->`);
                     
-                    allColumnsArray.forEach(col => {
-                        const safeKey = col
-                            .replace(/[^a-zA-Z0-9À-ÿ\s_-]/g, '_')
-                            .replace(/\s+/g, '_')
-                            .replace(/_+/g, '_')
-                            .replace(/^_+|_+$/g, '');
+                    if (shouldIncludeMetadata) {
+                        xmlParts.push(`<!-- Enregistrements: ${mergedData.length} -->`);
+                        xmlParts.push(`<!-- Colonnes: ${allColumns.size} -->`);
+                        xmlParts.push(`<!-- Colonnes uniques: ${allColumnsArray.join(', ')} -->`);
+                    }
+                }
+                
+                xmlParts.push('<dataset>');
+                
+                // Génération optimisée par morceaux
+                let processedChunks = 0;
+                
+                for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+                    const chunk = chunks[chunkIndex];
+                    const chunkParts = [];
+                    
+                    chunk.forEach((item, index) => {
+                        const globalIndex = chunkIndex * chunkSize + index;
+                        const indent = shouldFormat ? '  ' : '';
+                        const recordStart = shouldFormat ? `${indent}<record id="${globalIndex + 1}">\n` : `${indent}<record id="${globalIndex + 1}">`;
                         
-                        const value = escapeXML(item[col] || '');
-                        xml += `    <${safeKey}>${value}</${safeKey}>\n`;
+                        if (shouldFormat) {
+                            const fieldParts = allColumnsArray.map(col => {
+                                const safeKey = sanitizeXMLTag(col);
+                                const value = escapeXML(item[col] || '');
+                                return `${indent}  <${safeKey}>${value}</${safeKey}>`;
+                            });
+                            chunkParts.push(`${recordStart}${fieldParts.join('\n')}\n${indent}</record>`);
+                        } else {
+                            const fieldParts = allColumnsArray.map(col => {
+                                const safeKey = sanitizeXMLTag(col);
+                                const value = escapeXML(item[col] || '');
+                                return `<${safeKey}>${value}</${safeKey}>`;
+                            });
+                            chunkParts.push(`${recordStart}${fieldParts.join('')}</record>`);
+                        }
                     });
                     
-                    xml += '  </record>\n';
-                });
+                    xmlParts.push(...chunkParts);
+                    
+                    // Mise à jour de la progression
+                    processedChunks++;
+                    progressFill.style.width = `${(processedChunks / chunks.length) * 100}%`;
+                    
+                    // Pause pour permettre à l'interface de se mettre à jour
+                    if (chunks.length > 1) {
+                        await new Promise(resolve => setTimeout(resolve, 10));
+                    }
+                }
                 
-                xml += '</dataset>';
-
-                const blob = new Blob([xml], { type: 'application/xml;charset=utf-8' });
+                xmlParts.push('</dataset>');
+                
+                // Joindre les parties en une seule chaîne
+                const xmlContent = shouldFormat ? xmlParts.join('\n') : xmlParts.join('');
+                
+                // Créer le Blob de manière optimisée
+                const blob = new Blob([xmlContent], { type: 'application/xml;charset=utf-8' });
                 const url = URL.createObjectURL(blob);
                 
                 downloadBtn.href = url;
@@ -490,12 +548,11 @@ let mergedData = [];
                 downloadBtn.download = `export_${dateStr}_${mergedData.length}_records.xml`;
                 downloadSection.classList.add('visible');
                 
+                progressBar.classList.remove('visible');
                 showStatus('Conversion terminée avec succès !', 'success');
                 
-                // Défilement vers la section de téléchargement
                 downloadSection.scrollIntoView({ behavior: 'smooth' });
                 
-                // Réactiver le bouton après un délai
                 setTimeout(() => {
                     convertBtn.disabled = false;
                 }, 1000);
@@ -504,18 +561,38 @@ let mergedData = [];
                 console.error('Erreur lors de la conversion:', error);
                 showStatus(`Erreur lors de la conversion: ${error.message}`, 'error');
                 convertBtn.disabled = false;
+                progressBar.classList.remove('visible');
             }
         }
 
-        // Échappement XML
+        // Nettoyage des tags XML
+        function sanitizeXMLTag(tag) {
+            return tag
+                .replace(/[^a-zA-Z0-9À-ÿ\s_-]/g, '_')
+                .replace(/\s+/g, '_')
+                .replace(/_+/g, '_')
+                .replace(/^[0-9_-]+/, 'col_')
+                .replace(/^_+|_+$/g, '')
+                .substring(0, 50); // Limiter la longueur
+        }
+
+        // Échappement XML optimisé
         function escapeXML(text) {
             if (text === null || text === undefined) return '';
-            return String(text)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&apos;');
+            
+            let result = '';
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                switch (char) {
+                    case '&': result += '&amp;'; break;
+                    case '<': result += '&lt;'; break;
+                    case '>': result += '&gt;'; break;
+                    case '"': result += '&quot;'; break;
+                    case "'": result += '&apos;'; break;
+                    default: result += char;
+                }
+            }
+            return result;
         }
 
         // Affichage des statuts
@@ -530,7 +607,6 @@ let mergedData = [];
             status.innerHTML = icon[type] + '<span>' + message + '</span>';
             status.className = `status visible ${type}`;
             
-            // Auto-dissimulation pour les messages de succès/erreur
             if (type === 'success' || type === 'error') {
                 setTimeout(() => {
                     status.classList.remove('visible');
