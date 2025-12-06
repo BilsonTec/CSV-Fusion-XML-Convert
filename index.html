@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Fusion & XML Export | Outil Professionnel</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <header class="header">
+            <h1 class="title">CSV Fusion & XML Export</h1>
+            <p class="subtitle">Fusionnez et convertissez vos fichiers CSV en XML avec précision et efficacité</p>
+        </header>
+
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-content">
+                <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <div class="upload-text">
+                    <h3>Importer des fichiers CSV</h3>
+                    <p>Glissez-déposez vos fichiers ou cliquez pour parcourir</p>
+                    <p style="font-size: 13px; margin-top: 8px; color: var(--gray-500);">Format supporté : .csv</p>
+                </div>
+            </div>
+            <input type="file" id="csvFiles" class="file-input" accept=".csv" multiple>
+        </div>
+
+        <div class="file-list" id="fileList">
+            <div class="file-list-header">
+                <div class="file-list-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                        <polyline points="10 9 9 9 8 9"/>
+                    </svg>
+                    Fichiers sélectionnés
+                    <span class="file-count" id="fileCount">0</span>
+                </div>
+                <button class="clear-btn" id="clearFiles">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        <line x1="10" y1="11" x2="10" y2="17"/>
+                        <line x1="14" y1="11" x2="14" y2="17"/>
+                    </svg>
+                    Tout effacer
+                </button>
+            </div>
+            <div class="files-grid" id="filesGrid"></div>
+        </div>
+
+        <div class="progress-bar" id="progressBar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+
+        <div class="status" id="status"></div>
+
+        <div class="controls">
+            <button class="btn btn-primary" id="mergeBtn" disabled>
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M8 17h12a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2z"/>
+                    <path d="M4 21v-2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2"/>
+                    <path d="M12 9v6"/>
+                    <path d="M9 12h6"/>
+                </svg>
+                Fusionner les CSV
+            </button>
+            <button class="btn btn-secondary" id="convertBtn" disabled>
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <path d="M16 13H8"/>
+                    <path d="M16 17H8"/>
+                    <path d="M10 9H9H8"/>
+                </svg>
+                Convertir en XML
+            </button>
+        </div>
+
+        <div class="stats">
+            <div class="stat-item">
+                <div class="stat-value" id="fileCountStat">0</div>
+                <div class="stat-label">Fichiers</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="recordCount">0</div>
+                <div class="stat-label">Enregistrements</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="fileSize">0 KB</div>
+                <div class="stat-label">Taille totale</div>
+            </div>
+        </div>
+
+        <div class="download-section" id="downloadSection">
+            <div class="download-content">
+                <div class="download-info">
+                    <h3>Conversion terminée avec succès</h3>
+                    <p>Votre fichier XML est prêt à être téléchargé. Tous les enregistrements ont été préservés.</p>
+                </div>
+                <a id="downloadBtn" class="download-btn" download="export.xml">
+                    <svg class="download-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    Télécharger XML
+                </a>
+            </div>
+        </div>
+
+        <footer class="footer">
+            <p>Outil professionnel de traitement de données CSV/XML • v2.0</p>
+            <p style="font-size: 12px; margin-top: 4px; color: var(--gray-500);">
+                Compatible avec Excel, Google Sheets et systèmes ERP
+            </p>
+        </footer>
+    </div>
+
+    <script src="js/script.js"></script>
+</body>
+</html>
