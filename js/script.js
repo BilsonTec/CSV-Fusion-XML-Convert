@@ -1,6 +1,8 @@
 // @ts-nocheck
 let mergedData = [];
         let selectedFiles = [];
+        let allColumns = new Set(); // Pour garder toutes les colonnes uniques
+        let columnFilesMap = new Map(); // Pour savoir quelles colonnes sont dans quels fichiers
 
         // Éléments DOM
         const uploadArea = document.getElementById('uploadArea');
@@ -10,13 +12,21 @@ let mergedData = [];
         const fileCount = document.getElementById('fileCount');
         const fileCountStat = document.getElementById('fileCountStat');
         const recordCount = document.getElementById('recordCount');
-        const fileSize = document.getElementById('fileSize');
+        const uniqueColumns = document.getElementById('uniqueColumns');
+        const columnsSummary = document.getElementById('columnsSummary');
+        const columnsCount = document.getElementById('columnsCount');
+        const columnsList = document.getElementById('columnsList');
         const clearFilesBtn = document.getElementById('clearFiles');
         const mergeBtn = document.getElementById('mergeBtn');
         const convertBtn = document.getElementById('convertBtn');
         const status = document.getElementById('status');
         const progressBar = document.getElementById('progressBar');
         const progressFill = document.getElementById('progressFill');
+        const dataPreview = document.getElementById('dataPreview');
+        const previewTableHeader = document.getElementById('previewTableHeader');
+        const previewTableBody = document.getElementById('previewTableBody');
+        const previewColumns = document.getElementById('previewColumns');
+        const previewRows = document.getElementById('previewRows');
         const downloadSection = document.getElementById('downloadSection');
         const downloadBtn = document.getElementById('downloadBtn');
 
@@ -66,7 +76,7 @@ let mergedData = [];
             const uniqueNewFiles = newFiles.filter(file => !existingFileNames.includes(file.name));
             
             if (uniqueNewFiles.length === 0 && newFiles.length > 0) {
-                showStatus('Certains fichiers sont déjà sélectionnés', 'error');
+                showStatus('Certains fichiers sont déjà sélectionnés', 'warning');
                 return;
             }
             
@@ -85,6 +95,8 @@ let mergedData = [];
             
             if (selectedFiles.length === 0) {
                 fileList.classList.remove('visible');
+                dataPreview.classList.remove('visible');
+                columnsSummary.style.display = 'none';
                 return;
             }
             
@@ -92,11 +104,7 @@ let mergedData = [];
             fileCount.textContent = selectedFiles.length;
             fileCountStat.textContent = selectedFiles.length;
             
-            let totalSize = 0;
-            
             selectedFiles.forEach((file, index) => {
-                totalSize += file.size;
-                
                 const fileItem = document.createElement('div');
                 fileItem.className = 'file-item';
                 fileItem.innerHTML = `
@@ -112,7 +120,7 @@ let mergedData = [];
                         <div class="file-size">${formatFileSize(file.size)}</div>
                     </div>
                     <div class="file-actions">
-                        <button class="action-btn" onclick="removeFile(${index})">
+                        <button class="action-btn delete" onclick="removeFile(${index})">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="18" y1="6" x2="6" y2="18"/>
                                 <line x1="6" y1="6" x2="18" y2="18"/>
@@ -122,8 +130,6 @@ let mergedData = [];
                 `;
                 filesGrid.appendChild(fileItem);
             });
-            
-            fileSize.textContent = formatFileSize(totalSize);
         }
 
         // Supprimer un fichier
@@ -140,17 +146,25 @@ let mergedData = [];
             if (selectedFiles.length === 0) {
                 mergeBtn.disabled = true;
                 convertBtn.disabled = true;
+                showStatus('Tous les fichiers ont été effacés', 'info');
             }
         }
 
         // Effacer tous les fichiers
         function clearAllFiles() {
             selectedFiles = [];
+            mergedData = [];
+            allColumns.clear();
+            columnFilesMap.clear();
             csvFilesInput.value = '';
             updateFileList();
             mergeBtn.disabled = true;
             convertBtn.disabled = true;
-            showStatus('Tous les fichiers ont été effacés', 'info');
+            dataPreview.classList.remove('visible');
+            columnsSummary.style.display = 'none';
+            recordCount.textContent = '0';
+            uniqueColumns.textContent = '0';
+            showStatus('Tous les fichiers et données ont été effacés', 'info');
         }
 
         // Formatage de la taille
@@ -162,27 +176,59 @@ let mergedData = [];
             return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
         }
 
-        // Parsing CSV
-        function parseCSV(text) {
+        // Parsing CSV amélioré
+        function parseCSV(text, filename) {
             const rows = text.split(/\r?\n/).filter(r => r.trim() !== '');
-            if (rows.length === 0) return [];
+            if (rows.length === 0) return { headers: [], data: [] };
             
-            // Gestion des guillemets et des virgules dans les cellules
-            const headers = rows[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+            // Détection du séparateur
+            let separator = ',';
+            const firstLine = rows[0];
+            if (firstLine.includes(';') && !firstLine.includes(',') || firstLine.split(';').length > firstLine.split(',').length) {
+                separator = ';';
+            }
+            
+            // Parseur CSV qui gère les guillemets
+            const parseCSVLine = (line) => {
+                const result = [];
+                let current = '';
+                let inQuotes = false;
+                
+                for (let i = 0; i < line.length; i++) {
+                    const char = line[i];
+                    const nextChar = line[i + 1];
+                    
+                    if (char === '"' && inQuotes && nextChar === '"') {
+                        current += '"';
+                        i++; // Skip next quote
+                    } else if (char === '"') {
+                        inQuotes = !inQuotes;
+                    } else if (char === separator && !inQuotes) {
+                        result.push(current.trim());
+                        current = '';
+                    } else {
+                        current += char;
+                    }
+                }
+                
+                result.push(current.trim());
+                return result.map(cell => cell.replace(/^"|"$/g, ''));
+            };
+            
+            const headers = parseCSVLine(rows[0]).map(h => h.trim());
             const data = rows.slice(1).map(row => {
-                const values = row.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || [];
+                const values = parseCSVLine(row);
                 let obj = {};
                 headers.forEach((h, i) => {
-                    let value = values[i] || '';
-                    value = value.trim().replace(/^"|"$/g, '');
-                    obj[h] = value;
+                    obj[h] = values[i] || '';
                 });
                 return obj;
-            });
-            return data.filter(item => Object.values(item).some(v => v !== ''));
+            }).filter(item => Object.values(item).some(v => v !== ''));
+            
+            return { headers, data };
         }
 
-        // Fusion des CSV
+        // Fusion des CSV en gardant TOUTES les colonnes
         async function mergeCSV() {
             if (selectedFiles.length === 0) {
                 showStatus('Veuillez sélectionner au moins un fichier CSV', 'error');
@@ -196,41 +242,195 @@ let mergedData = [];
             showStatus('Démarrage de la fusion...', 'info');
 
             mergedData = [];
+            allColumns.clear();
+            columnFilesMap.clear();
             let processedFiles = 0;
+            let totalRecords = 0;
 
-            for (let file of selectedFiles) {
-                try {
+            try {
+                // Première passe : collecter toutes les colonnes uniques
+                showStatus('Analyse des colonnes...', 'info');
+                
+                for (let file of selectedFiles) {
                     const text = await readFileAsText(file);
-                    const parsedData = parseCSV(text);
-                    mergedData = mergedData.concat(parsedData);
-                    processedFiles++;
+                    const { headers } = parseCSV(text, file.name);
                     
-                    // Mise à jour de la barre de progression
-                    const progress = (processedFiles / selectedFiles.length) * 100;
+                    headers.forEach(header => {
+                        allColumns.add(header);
+                        if (!columnFilesMap.has(header)) {
+                            columnFilesMap.set(header, new Set());
+                        }
+                        columnFilesMap.get(header).add(file.name);
+                    });
+                    
+                    processedFiles++;
+                    const progress = (processedFiles / selectedFiles.length) * 50;
+                    progressFill.style.width = `${progress}%`;
+                }
+                
+                showStatus(`Toutes les colonnes collectées (${allColumns.size} uniques)`, 'success');
+                
+                // Deuxième passe : fusionner les données
+                showStatus('Fusion des données...', 'info');
+                processedFiles = 0;
+                
+                const allColumnsArray = Array.from(allColumns);
+                
+                for (let file of selectedFiles) {
+                    const text = await readFileAsText(file);
+                    const { headers, data } = parseCSV(text, file.name);
+                    
+                    // Créer un mapping des index des colonnes
+                    const headerIndexMap = {};
+                    headers.forEach((header, index) => {
+                        headerIndexMap[header] = index;
+                    });
+                    
+                    // Pour chaque ligne du fichier actuel
+                    data.forEach(row => {
+                        const mergedRow = {};
+                        
+                        // Pour chaque colonne globale
+                        allColumnsArray.forEach(col => {
+                            if (headerIndexMap[col] !== undefined) {
+                                // Si la colonne existe dans ce fichier, prendre la valeur
+                                mergedRow[col] = row[headers[headerIndexMap[col]]];
+                            } else {
+                                // Sinon, laisser vide
+                                mergedRow[col] = '';
+                            }
+                        });
+                        
+                        mergedData.push(mergedRow);
+                        totalRecords++;
+                    });
+                    
+                    processedFiles++;
+                    const progress = 50 + (processedFiles / selectedFiles.length) * 50;
                     progressFill.style.width = `${progress}%`;
                     
                     showStatus(`Traitement de ${file.name}... (${processedFiles}/${selectedFiles.length})`, 'info');
                     
                     // Petite pause pour l'animation
                     await new Promise(resolve => setTimeout(resolve, 300));
-                } catch (error) {
-                    showStatus(`Erreur lors de la lecture de ${file.name}: ${error.message}`, 'error');
-                    mergeBtn.disabled = false;
-                    progressBar.classList.remove('visible');
-                    return;
                 }
-            }
 
-            mergeBtn.disabled = false;
-            convertBtn.disabled = false;
-            progressFill.style.width = '100%';
-            
-            setTimeout(() => {
+                mergeBtn.disabled = false;
+                convertBtn.disabled = false;
+                progressFill.style.width = '100%';
+                
+                setTimeout(() => {
+                    progressBar.classList.remove('visible');
+                }, 500);
+                
+                // Mettre à jour les statistiques
+                recordCount.textContent = mergedData.length.toLocaleString();
+                uniqueColumns.textContent = allColumns.size;
+                
+                // Afficher le résumé des colonnes
+                updateColumnsSummary();
+                
+                // Afficher l'aperçu des données
+                showDataPreview();
+                
+                showStatus(`Fusion réussie ! ${mergedData.length} enregistrements fusionnés avec ${allColumns.size} colonnes uniques.`, 'success');
+                
+            } catch (error) {
+                console.error('Erreur lors de la fusion:', error);
+                showStatus(`Erreur lors de la fusion: ${error.message}`, 'error');
+                mergeBtn.disabled = false;
                 progressBar.classList.remove('visible');
-            }, 500);
+            }
+        }
+
+        // Mettre à jour le résumé des colonnes
+        function updateColumnsSummary() {
+            columnsSummary.style.display = 'block';
+            columnsCount.textContent = allColumns.size;
+            columnsList.innerHTML = '';
             
-            recordCount.textContent = mergedData.length.toLocaleString();
-            showStatus(`Fusion réussie ! ${mergedData.length} enregistrements traités.`, 'success');
+            const allColumnsArray = Array.from(allColumns);
+            const totalFiles = selectedFiles.length;
+            
+            allColumnsArray.forEach(col => {
+                const filesWithColumn = columnFilesMap.get(col)?.size || 0;
+                const presentInAll = filesWithColumn === totalFiles;
+                const presentInSome = filesWithColumn > 0 && filesWithColumn < totalFiles;
+                
+                const columnTag = document.createElement('span');
+                columnTag.className = 'column-tag';
+                if (presentInAll) {
+                    columnTag.classList.add('present-in-all');
+                } else if (presentInSome) {
+                    columnTag.classList.add('present-in-some');
+                }
+                
+                columnTag.innerHTML = `
+                    ${col}
+                    <span style="font-size: 10px; opacity: 0.8;">(${filesWithColumn}/${totalFiles})</span>
+                `;
+                columnsList.appendChild(columnTag);
+            });
+        }
+
+        // Afficher l'aperçu des données
+        function showDataPreview() {
+            dataPreview.classList.add('visible');
+            previewColumns.textContent = `${allColumns.size} colonnes`;
+            previewRows.textContent = `${Math.min(mergedData.length, 10)} sur ${mergedData.length}`;
+            
+            // Créer l'en-tête du tableau
+            const allColumnsArray = Array.from(allColumns);
+            previewTableHeader.innerHTML = '';
+            const headerRow = document.createElement('tr');
+            
+            allColumnsArray.forEach(col => {
+                const th = document.createElement('th');
+                th.textContent = col;
+                
+                // Ajouter un indicateur si la colonne n'est pas dans tous les fichiers
+                const filesWithColumn = columnFilesMap.get(col)?.size || 0;
+                if (filesWithColumn < selectedFiles.length) {
+                    th.title = `Présente dans ${filesWithColumn}/${selectedFiles.length} fichiers`;
+                    th.style.color = '#f59e0b';
+                }
+                
+                headerRow.appendChild(th);
+            });
+            previewTableHeader.appendChild(headerRow);
+            
+            // Créer le corps du tableau (10 premières lignes max)
+            previewTableBody.innerHTML = '';
+            const rowsToShow = Math.min(mergedData.length, 10);
+            
+            for (let i = 0; i < rowsToShow; i++) {
+                const row = document.createElement('tr');
+                
+                allColumnsArray.forEach(col => {
+                    const td = document.createElement('td');
+                    td.textContent = mergedData[i][col] || '';
+                    if (mergedData[i][col] === '') {
+                        td.style.color = '#9ca3af';
+                        td.style.fontStyle = 'italic';
+                    }
+                    row.appendChild(td);
+                });
+                
+                previewTableBody.appendChild(row);
+            }
+            
+            // Si plus de 10 lignes, ajouter une ligne d'information
+            if (mergedData.length > 10) {
+                const infoRow = document.createElement('tr');
+                const infoCell = document.createElement('td');
+                infoCell.colSpan = allColumnsArray.length;
+                infoCell.textContent = `... et ${mergedData.length - 10} lignes supplémentaires`;
+                infoCell.style.textAlign = 'center';
+                infoCell.style.fontStyle = 'italic';
+                infoCell.style.color = '#6b7280';
+                infoRow.appendChild(infoCell);
+                previewTableBody.appendChild(infoRow);
+            }
         }
 
         // Lecture de fichier
@@ -243,7 +443,7 @@ let mergedData = [];
             });
         }
 
-        // Conversion en XML
+        // Conversion en XML avec TOUTES les colonnes
         async function convertToXML() {
             if (mergedData.length === 0) {
                 showStatus('Veuillez d\'abord fusionner les fichiers CSV', 'error');
@@ -251,21 +451,32 @@ let mergedData = [];
             }
 
             convertBtn.disabled = true;
-            showStatus('Conversion en cours...', 'info');
+            showStatus('Conversion en XML...', 'info');
 
             try {
+                const allColumnsArray = Array.from(allColumns);
+                
                 let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-                xml += '<!-- Generated by CSV to XML Converter -->\n';
-                xml += '<!-- ' + new Date().toISOString() + ' -->\n';
+                xml += '<!-- Généré par CSV to XML Converter -->\n';
+                xml += `<!-- Date: ${new Date().toLocaleString('fr-FR')} -->\n`;
+                xml += `<!-- Fichiers sources: ${selectedFiles.map(f => f.name).join(', ')} -->\n`;
+                xml += `<!-- Enregistrements: ${mergedData.length} | Colonnes: ${allColumns.size} -->\n`;
                 xml += '<dataset>\n';
                 
                 mergedData.forEach((item, index) => {
                     xml += `  <record id="${index + 1}">\n`;
-                    for (const key in item) {
-                        const safeKey = key.replace(/[^a-zA-Z0-9_]/g, '_').replace(/^_+/, '');
-                        const value = escapeXML(item[key]);
+                    
+                    allColumnsArray.forEach(col => {
+                        const safeKey = col
+                            .replace(/[^a-zA-Z0-9À-ÿ\s_-]/g, '_')
+                            .replace(/\s+/g, '_')
+                            .replace(/_+/g, '_')
+                            .replace(/^_+|_+$/g, '');
+                        
+                        const value = escapeXML(item[col] || '');
                         xml += `    <${safeKey}>${value}</${safeKey}>\n`;
-                    }
+                    });
+                    
                     xml += '  </record>\n';
                 });
                 
@@ -275,7 +486,8 @@ let mergedData = [];
                 const url = URL.createObjectURL(blob);
                 
                 downloadBtn.href = url;
-                downloadBtn.download = `export_${new Date().toISOString().split('T')[0]}.xml`;
+                const dateStr = new Date().toISOString().split('T')[0];
+                downloadBtn.download = `export_${dateStr}_${mergedData.length}_records.xml`;
                 downloadSection.classList.add('visible');
                 
                 showStatus('Conversion terminée avec succès !', 'success');
@@ -289,6 +501,7 @@ let mergedData = [];
                 }, 1000);
                 
             } catch (error) {
+                console.error('Erreur lors de la conversion:', error);
                 showStatus(`Erreur lors de la conversion: ${error.message}`, 'error');
                 convertBtn.disabled = false;
             }
@@ -310,7 +523,8 @@ let mergedData = [];
             const icon = {
                 success: '<svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
                 error: '<svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
-                info: '<svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
+                info: '<svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+                warning: '<svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
             };
             
             status.innerHTML = icon[type] + '<span>' + message + '</span>';

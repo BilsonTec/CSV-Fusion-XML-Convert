@@ -23,7 +23,7 @@
                 <div class="upload-text">
                     <h3>Importer des fichiers CSV</h3>
                     <p>Glissez-déposez vos fichiers ou cliquez pour parcourir</p>
-                    <p style="font-size: 13px; margin-top: 8px; color: var(--gray-500);">Format supporté : .csv</p>
+                    <p style="font-size: 13px; margin-top: 8px; color: var(--gray-500);">Format supporté : .csv (séparateur virgule)</p>
                 </div>
             </div>
             <input type="file" id="csvFiles" class="file-input" accept=".csv" multiple>
@@ -53,6 +53,44 @@
                 </button>
             </div>
             <div class="files-grid" id="filesGrid"></div>
+        </div>
+
+        <div class="columns-summary" id="columnsSummary" style="display: none;">
+            <div style="font-weight: 500; margin-bottom: 8px; color: var(--gray-900);">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline-block; vertical-align: middle; margin-right: 8px;">
+                    <path d="M9 17h6"/>
+                    <path d="M12 12h.01"/>
+                    <path d="M12 8h.01"/>
+                    <path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/>
+                </svg>
+                Colonnes détectées : <span id="columnsCount">0</span> au total
+            </div>
+            <div class="columns-list" id="columnsList"></div>
+        </div>
+
+        <div class="data-preview" id="dataPreview">
+            <div class="preview-header">
+                <div class="preview-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M8 17h12a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2z"/>
+                        <path d="M4 21v-2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2"/>
+                        <path d="M16 8h.01"/>
+                        <path d="M12 8h.01"/>
+                        <path d="M8 8h.01"/>
+                    </svg>
+                    Aperçu des données fusionnées
+                    <span class="columns-info" id="previewColumns">0 colonnes</span>
+                </div>
+                <div style="font-size: 12px; color: var(--gray-600);">
+                    <span id="previewRows">0</span> lignes affichées
+                </div>
+            </div>
+            <div class="preview-table-container" style="max-height: 300px; overflow: auto;">
+                <table class="preview-table" id="previewTable">
+                    <thead id="previewTableHeader"></thead>
+                    <tbody id="previewTableBody"></tbody>
+                </table>
+            </div>
         </div>
 
         <div class="progress-bar" id="progressBar">
@@ -93,8 +131,8 @@
                 <div class="stat-label">Enregistrements</div>
             </div>
             <div class="stat-item">
-                <div class="stat-value" id="fileSize">0 KB</div>
-                <div class="stat-label">Taille totale</div>
+                <div class="stat-value" id="uniqueColumns">0</div>
+                <div class="stat-label">Colonnes uniques</div>
             </div>
         </div>
 
@@ -102,7 +140,7 @@
             <div class="download-content">
                 <div class="download-info">
                     <h3>Conversion terminée avec succès</h3>
-                    <p>Votre fichier XML est prêt à être téléchargé. Tous les enregistrements ont été préservés.</p>
+                    <p>Votre fichier XML est prêt à être téléchargé. Toutes les colonnes et valeurs ont été préservées.</p>
                 </div>
                 <a id="downloadBtn" class="download-btn" download="export.xml">
                     <svg class="download-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -122,7 +160,6 @@
             </p>
         </footer>
     </div>
-
     <script src="js/script.js"></script>
 </body>
 </html>
